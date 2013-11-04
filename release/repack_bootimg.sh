@@ -3,7 +3,7 @@ RAMV=$1
 KVER=`cat ../.version`
 RELV="`cat ../.version`-${RAMV}"
 RELV="_FuguMod_$(date +%Y%m%d_r)${RELV}"
-if [ "ZZ${RAMV}" == "ZZ" ]
+if [ "ZZ${RAMV}" -eq "ZZ" ]
 then
 	echo "No version specified"
 	exit 1
