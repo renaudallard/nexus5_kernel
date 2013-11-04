@@ -1,4 +1,9 @@
-ui_print("Installing FuguMod kernel.");
-set_progress(1.000000);
-package_extract_file("boot.img", "/dev/block/platform/omap/omap_hsmmc.0/by-name/boot");
-ui_print("Install Finished.");
+ui_print("FuguMod Nexus 5 Kernel...");
+
+ui_print("Extracting Kernel files...");
+package_extract_file("boot.img", "/dev/block/platform/msm_sdcc.1/by-name/boot");
+ui_print("***********************************");
+ui_print("* FuguMod Installation Completed! *");
+ui_print("***********************************");
+show_progress(0.100000, 0);
+
