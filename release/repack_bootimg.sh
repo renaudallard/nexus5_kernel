@@ -11,7 +11,7 @@ else
 	cd initramfs-${RAMV} || exit 1
 	find . | cpio -o -H newc | lzop > ../new_initramfs.cpio.lzo
 	cd ..
-	abootimg --create ${HOME}/kernel${RELV}.img -k ../arch/arm/boot/zImage -r new_initramfs.cpio.lzo
+	abootimg --create ${HOME}/kernel${RELV}.img -k ../arch/arm/boot/zImage -f bootimg.cfg -r new_initramfs.cpio.lzo
 
 	git tag -a r${KVER} -m r${KVER}
 
