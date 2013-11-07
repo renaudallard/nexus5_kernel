@@ -9,7 +9,7 @@ then
 	exit 1
 else
 	cd initramfs-${RAMV} || exit 1
-	find . | cpio -o -H newc | lzop > ../new_initramfs.cpio.lzo
+	find . | cpio -o -H newc | lzop -9 > ../new_initramfs.cpio.lzo
 	cd ..
 	abootimg --create ${HOME}/kernel${RELV}.img -k ../arch/arm/boot/zImage-dtb -f bootimg.cfg -r new_initramfs.cpio.lzo
 
