@@ -125,7 +125,7 @@ struct cpu_cache_fns {
 	void (*dma_inv_range)(const void *, const void *);
 	void (*dma_clean_range)(const void *, const void *);
 	void (*dma_flush_range)(const void *, const void *);
-};
+} __no_const;
 
 /*
  * Select the calling method

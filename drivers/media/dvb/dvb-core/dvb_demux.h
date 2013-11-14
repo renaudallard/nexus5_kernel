@@ -160,7 +160,7 @@ struct dvb_demux_feed {
 	union {
 		dmx_ts_cb ts;
 		dmx_section_cb sec;
-	} cb;
+	} __no_const cb;
 
 	union {
 		dmx_ts_data_ready_cb ts;

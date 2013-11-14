@@ -82,6 +82,7 @@ struct snd_pcm_ops {
 	int (*ack)(struct snd_pcm_substream *substream);
 	int (*restart)(struct snd_pcm_substream *substream);
 };
+typedef struct snd_pcm_ops __no_const snd_pcm_ops_no_const;
 
 /*
  *

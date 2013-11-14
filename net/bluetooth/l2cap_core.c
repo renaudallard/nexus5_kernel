@@ -3854,8 +3854,10 @@ static int l2cap_parse_conf_rsp(struct sock *sk, void *rsp, int len, void *data,
 			break;
 
 		case L2CAP_CONF_RFC:
-			if (olen == sizeof(rfc))
-				memcpy(&rfc, (void *)val, olen);
+			if (olen != sizeof(rfc))
+				break;
+
+			memcpy(&rfc, (void *)val, olen);
 
 			if ((pi->conf_state & L2CAP_CONF_STATE2_DEVICE) &&
 							rfc.mode != pi->mode)
