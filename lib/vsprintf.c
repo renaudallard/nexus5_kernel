@@ -438,8 +438,6 @@ char *symbol_string(char *buf, char *end, void *ptr,
 		sprint_backtrace(sym, value);
 	else if (ext != 'f' && ext != 's' && ext != 'a')
 		sprint_symbol(sym, value);
-	else
-		sprint_symbol_no_offset(sym, value);
 
 	return string(buf, end, sym, spec);
 #else
