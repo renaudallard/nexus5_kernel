@@ -61,7 +61,7 @@ static int autofs4_write(struct autofs_sb_info *sbi,
 {
 	unsigned long sigpipe, flags;
 	mm_segment_t fs;
-	const char __user *data = (const char __force_user *)addr;
+	const char *data = (const char *)addr;
 	ssize_t wr = 0;
 
 	sigpipe = sigismember(&current->pending.signal, SIGPIPE);

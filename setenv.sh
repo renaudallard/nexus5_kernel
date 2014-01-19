@@ -16,12 +16,12 @@ export PATH=$PATH:${TOOLCHAIN}/
 export PATH=$PATH:${TOOLCHAIN}/lib
 #export CFLAGS="-mcpu=cortex-a8 -mfpu=neon -mfloat-abi=softfp -static -fstack-protector -fstack-protector-all -fno-gcse -fprefetch-loop-arrays --param l2-cache-size=512 --param l1-cache-size=64 --param simultaneous-prefetches=6 --param prefetch-latency=400 --param l1-cache-line-size=64"
 export CFLAGS="-static -fstack-protector -fstack-protector-all -mfpu=neon -mcpu=cortex-a9"
-export LDFLAGS="-static -z relro -z now -z muldefs"
+export LDFLAGS="-static -z relro -z now"
 export CPPFLAGS="-static"
 export KBUILD_BUILD_HOST=fugu
 export KBUILD_BUILD_USER=r
 
 alias gcp='git cherry-pick -x '
-alias rel='make -j20 CONFIG_NO_ERROR_ON_MISMATCH=y DISABLE_PAX_PLUGINS=y && cd release && ./repack_bootimg.sh 4.4 && cd ..'
+alias rel='make -j20 && cd release && ./repack_bootimg.sh 4.4 && cd ..'
 
 echo "ARM environment set"

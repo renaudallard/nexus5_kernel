@@ -24,7 +24,7 @@ struct nameidata {
 	unsigned	seq;
 	int		last_type;
 	unsigned	depth;
-	const char *saved_names[MAX_NESTED_LINKS + 1];
+	char *saved_names[MAX_NESTED_LINKS + 1];
 
 	/* Intent data */
 	union {
@@ -94,12 +94,12 @@ extern int follow_up(struct path *);
 extern struct dentry *lock_rename(struct dentry *, struct dentry *);
 extern void unlock_rename(struct dentry *, struct dentry *);
 
-static inline void nd_set_link(struct nameidata *nd, const char *path)
+static inline void nd_set_link(struct nameidata *nd, char *path)
 {
 	nd->saved_names[nd->depth] = path;
 }
 
-static inline const char *nd_get_link(const struct nameidata *nd)
+static inline char *nd_get_link(struct nameidata *nd)
 {
 	return nd->saved_names[nd->depth];
 }

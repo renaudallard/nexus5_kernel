@@ -77,7 +77,7 @@ void blk_iopoll_complete(struct blk_iopoll *iopoll)
 }
 EXPORT_SYMBOL(blk_iopoll_complete);
 
-static void blk_iopoll_softirq(void)
+static void blk_iopoll_softirq(struct softirq_action *h)
 {
 	struct list_head *list = &__get_cpu_var(blk_cpu_iopoll);
 	int rearm = 0, budget = blk_iopoll_budget;

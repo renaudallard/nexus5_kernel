@@ -53,7 +53,7 @@ static const struct ide_port_ops netcell_port_ops = {
 		.udma_mask	= ATA_UDMA6, \
 	}
 
-static const struct ide_port_info generic_chipsets[] __devinitconst = {
+static const struct ide_port_info generic_chipsets[] __devinitdata = {
 	/*  0: Unknown */
 	DECLARE_GENERIC_PCI_DEV(0),
 

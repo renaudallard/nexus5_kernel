@@ -92,7 +92,7 @@ static const struct ide_port_ops triflex_port_ops = {
 	.set_dma_mode		= triflex_set_mode,
 };
 
-static const struct ide_port_info triflex_device __devinitconst = {
+static const struct ide_port_info triflex_device __devinitdata = {
 	.name		= DRV_NAME,
 	.enablebits	= {{0x80, 0x01, 0x01}, {0x80, 0x02, 0x02}},
 	.port_ops	= &triflex_port_ops,

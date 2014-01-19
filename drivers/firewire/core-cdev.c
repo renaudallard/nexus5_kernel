@@ -1341,7 +1341,8 @@ static int init_iso_resource(struct client *client,
 	int ret;
 
 	if ((request->channels == 0 && request->bandwidth == 0) ||
-	    request->bandwidth > BANDWIDTH_AVAILABLE_INITIAL)
+	    request->bandwidth > BANDWIDTH_AVAILABLE_INITIAL ||
+	    request->bandwidth < 0)
 		return -EINVAL;
 
 	r  = kmalloc(sizeof(*r), GFP_KERNEL);

@@ -9,7 +9,6 @@
 #include <linux/export.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/sched.h>
 
 #include <asm/uaccess.h>
 #include <asm/page.h>
@@ -57,9 +56,6 @@ int seq_open(struct file *file, const struct seq_operations *op)
 	memset(p, 0, sizeof(*p));
 	mutex_init(&p->lock);
 	p->op = op;
-#ifdef CONFIG_GRKERNSEC_PROC_MEMMAP
-	p->exec_id = current->exec_id;
-#endif
 
 	/*
 	 * Wrappers around seq_open(e.g. swaps_open) need to be
@@ -571,7 +567,7 @@ static void single_stop(struct seq_file *p, void *v)
 int single_open(struct file *file, int (*show)(struct seq_file *, void *),
 		void *data)
 {
-	seq_operations_no_const *op = kmalloc(sizeof(*op), GFP_KERNEL);
+	struct seq_operations *op = kmalloc(sizeof(*op), GFP_KERNEL);
 	int res = -ENOMEM;
 
 	if (op) {

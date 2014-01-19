@@ -35,7 +35,6 @@
 #include <linux/termios.h>
 #include <linux/timer.h>
 #include <linux/tty.h>		/* struct tty_struct */
-#include <asm/local.h>
 
 #include <net/irda/irias_object.h>
 #include <net/irda/ircomm_core.h>
@@ -106,8 +105,8 @@ struct ircomm_tty_cb {
         unsigned short    close_delay;
         unsigned short    closing_wait; /* time to wait before closing */
 
-	local_t open_count;
-	local_t blocked_open;	/* # of blocked opens */
+	int  open_count;
+	int  blocked_open;	/* # of blocked opens */
 
 	/* Protect concurent access to :
 	 *	o self->open_count

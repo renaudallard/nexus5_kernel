@@ -209,7 +209,7 @@ struct track {
 
 enum track_item { TRACK_ALLOC, TRACK_FREE };
 
-#if defined(CONFIG_SYSFS) && !defined(CONFIG_GRKERNSEC_PROC_ADD)
+#ifdef CONFIG_SYSFS
 static int sysfs_slab_add(struct kmem_cache *);
 static int sysfs_slab_alias(struct kmem_cache *, const char *);
 static void sysfs_slab_remove(struct kmem_cache *);
@@ -538,7 +538,7 @@ static void print_track(const char *s, struct track *t)
 	if (!t->addr)
 		return;
 
-	printk(KERN_ERR "INFO: %s in %pA age=%lu cpu=%u pid=%d\n",
+	printk(KERN_ERR "INFO: %s in %pS age=%lu cpu=%u pid=%d\n",
 		s, (void *)t->addr, jiffies - t->when, t->cpu, t->pid);
 #ifdef CONFIG_STACKTRACE
 	{
@@ -2606,8 +2606,6 @@ void kmem_cache_free(struct kmem_cache *s, void *x)
 
 	page = virt_to_head_page(x);
 
-	BUG_ON(!PageSlab(page));
-
 	slab_free(s, page, x, _RET_IP_);
 
 	trace_kmem_cache_free(_RET_IP_, x);
@@ -2641,7 +2639,7 @@ static int slub_min_objects;
  * Merge control. If this is set then no merging of slab caches will occur.
  * (Could be removed. This was introduced to pacify the merge skeptics.)
  */
-static int slub_nomerge = 1;
+static int slub_nomerge;
 
 /*
  * Calculate the order of allocation given an slab object size.
@@ -3094,7 +3092,7 @@ static int kmem_cache_open(struct kmem_cache *s,
 	else
 		s->cpu_partial = 30;
 
-	atomic_set(&s->refcount, 1);
+	s->refcount = 1;
 #ifdef CONFIG_NUMA
 	s->remote_node_defrag_ratio = 1000;
 #endif
@@ -3198,7 +3196,8 @@ static inline int kmem_cache_close(struct kmem_cache *s)
 void kmem_cache_destroy(struct kmem_cache *s)
 {
 	down_write(&slub_lock);
-	if (atomic_dec_and_test(&s->refcount)) {
+	s->refcount--;
+	if (!s->refcount) {
 		list_del(&s->list);
 		up_write(&slub_lock);
 		if (kmem_cache_close(s)) {
@@ -3408,50 +3407,6 @@ void *__kmalloc_node(size_t size, gfp_t flags, int node)
 }
 EXPORT_SYMBOL(__kmalloc_node);
 #endif
-
-void check_object_size(const void *ptr, unsigned long n, bool to)
-{
-
-#ifdef CONFIG_PAX_USERCOPY
-	struct page *page;
-	struct kmem_cache *s = NULL;
-	unsigned long offset;
-	const char *type;
-
-	if (!n)
-		return;
-
-	type = "<null>";
-	if (ZERO_OR_NULL_PTR(ptr))
-		goto report;
-
-	if (!virt_addr_valid(ptr))
-		return;
-
-	page = virt_to_head_page(ptr);
-
-	type = "<process stack>";
-	if (!PageSlab(page)) {
-		if (object_is_on_stack(ptr, n) == -1)
-			goto report;
-		return;
-	}
-
-	s = page->slab;
-	type = s->name;
-	if (!(s->flags & SLAB_USERCOPY))
-		goto report;
-
-	offset = (ptr - page_address(page)) % s->size;
-	if (offset <= s->objsize && n <= s->objsize - offset)
-		return;
-
-report:
-	pax_report_usercopy(ptr, n, to, type);
-#endif
-
-}
-EXPORT_SYMBOL(check_object_size);
 
 size_t ksize(const void *object)
 {
@@ -3727,7 +3682,7 @@ static void __init kmem_cache_bootstrap_fixup(struct kmem_cache *s)
 	int node;
 
 	list_add(&s->list, &slab_caches);
-	atomic_set(&s->refcount, -1);
+	s->refcount = -1;
 
 	for_each_node_state(node, N_NORMAL_MEMORY) {
 		struct kmem_cache_node *n = get_node(s, node);
@@ -3847,17 +3802,17 @@ void __init kmem_cache_init(void)
 
 	/* Caches that are not of the two-to-the-power-of size */
 	if (KMALLOC_MIN_SIZE <= 32) {
-		kmalloc_caches[1] = create_kmalloc_cache("kmalloc-96", 96, SLAB_USERCOPY);
+		kmalloc_caches[1] = create_kmalloc_cache("kmalloc-96", 96, 0);
 		caches++;
 	}
 
 	if (KMALLOC_MIN_SIZE <= 64) {
-		kmalloc_caches[2] = create_kmalloc_cache("kmalloc-192", 192, SLAB_USERCOPY);
+		kmalloc_caches[2] = create_kmalloc_cache("kmalloc-192", 192, 0);
 		caches++;
 	}
 
 	for (i = KMALLOC_SHIFT_LOW; i < SLUB_PAGE_SHIFT; i++) {
-		kmalloc_caches[i] = create_kmalloc_cache("kmalloc", 1 << i, SLAB_USERCOPY);
+		kmalloc_caches[i] = create_kmalloc_cache("kmalloc", 1 << i, 0);
 		caches++;
 	}
 
@@ -3900,7 +3855,7 @@ void __init kmem_cache_init(void)
 	}
 #endif
 	printk(KERN_INFO
-		"SLUB: Genslabs=%d, HWalign=%lu, Order=%d-%d, MinObjects=%d,"
+		"SLUB: Genslabs=%d, HWalign=%d, Order=%d-%d, MinObjects=%d,"
 		" CPUs=%d, Nodes=%d\n",
 		caches, cache_line_size(),
 		slub_min_order, slub_max_order, slub_min_objects,
@@ -3925,7 +3880,7 @@ static int slab_unmergeable(struct kmem_cache *s)
 	/*
 	 * We may have set a slab to be unmergeable during bootstrap.
 	 */
-	if (atomic_read(&s->refcount) < 0)
+	if (s->refcount < 0)
 		return 1;
 
 	return 0;
@@ -3984,7 +3939,7 @@ struct kmem_cache *kmem_cache_create(const char *name, size_t size,
 	down_write(&slub_lock);
 	s = find_mergeable(size, align, flags, name, ctor);
 	if (s) {
-		atomic_inc(&s->refcount);
+		s->refcount++;
 		/*
 		 * Adjust the object sizes so that we clear
 		 * the complete object on kzalloc.
@@ -3993,7 +3948,7 @@ struct kmem_cache *kmem_cache_create(const char *name, size_t size,
 		s->inuse = max_t(int, s->inuse, ALIGN(size, sizeof(void *)));
 
 		if (sysfs_slab_alias(s, name)) {
-			atomic_dec(&s->refcount);
+			s->refcount--;
 			goto err;
 		}
 		up_write(&slub_lock);
@@ -4122,7 +4077,7 @@ void *__kmalloc_node_track_caller(size_t size, gfp_t gfpflags,
 }
 #endif
 
-#if defined(CONFIG_SYSFS) && !defined(CONFIG_GRKERNSEC_PROC_ADD)
+#ifdef CONFIG_SYSFS
 static int count_inuse(struct page *page)
 {
 	return page->inuse;
@@ -4509,12 +4464,12 @@ static void resiliency_test(void)
 	validate_slab_cache(kmalloc_caches[9]);
 }
 #else
-#if defined(CONFIG_SYSFS) && !defined(CONFIG_GRKERNSEC_PROC_ADD)
+#ifdef CONFIG_SYSFS
 static void resiliency_test(void) {};
 #endif
 #endif
 
-#if defined(CONFIG_SYSFS) && !defined(CONFIG_GRKERNSEC_PROC_ADD)
+#ifdef CONFIG_SYSFS
 enum slab_stat_type {
 	SL_ALL,			/* All slabs */
 	SL_PARTIAL,		/* Only partially allocated slabs */
@@ -4757,7 +4712,7 @@ SLAB_ATTR_RO(ctor);
 
 static ssize_t aliases_show(struct kmem_cache *s, char *buf)
 {
-	return sprintf(buf, "%d\n", atomic_read(&s->refcount) - 1);
+	return sprintf(buf, "%d\n", s->refcount - 1);
 }
 SLAB_ATTR_RO(aliases);
 
@@ -5328,7 +5283,6 @@ static char *create_unique_id(struct kmem_cache *s)
 	return name;
 }
 
-#if defined(CONFIG_SYSFS) && !defined(CONFIG_GRKERNSEC_PROC_ADD)
 static int sysfs_slab_add(struct kmem_cache *s)
 {
 	int err;
@@ -5391,7 +5345,6 @@ static void sysfs_slab_remove(struct kmem_cache *s)
 	kobject_del(&s->kobj);
 	kobject_put(&s->kobj);
 }
-#endif
 
 /*
  * Need to buffer aliases during bootup until sysfs becomes
@@ -5405,7 +5358,6 @@ struct saved_alias {
 
 static struct saved_alias *alias_list;
 
-#if defined(CONFIG_SYSFS) && !defined(CONFIG_GRKERNSEC_PROC_ADD)
 static int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 {
 	struct saved_alias *al;
@@ -5428,7 +5380,6 @@ static int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 	alias_list = al;
 	return 0;
 }
-#endif
 
 static int __init slab_sysfs_init(void)
 {

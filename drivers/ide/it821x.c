@@ -630,7 +630,7 @@ static const struct ide_port_ops it821x_port_ops = {
 	.cable_detect		= it821x_cable_detect,
 };
 
-static const struct ide_port_info it821x_chipset __devinitconst = {
+static const struct ide_port_info it821x_chipset __devinitdata = {
 	.name		= DRV_NAME,
 	.init_chipset	= init_chipset_it821x,
 	.init_hwif	= init_hwif_it821x,

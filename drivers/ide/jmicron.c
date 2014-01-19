@@ -102,7 +102,7 @@ static const struct ide_port_ops jmicron_port_ops = {
 	.cable_detect		= jmicron_cable_detect,
 };
 
-static const struct ide_port_info jmicron_chipset __devinitconst = {
+static const struct ide_port_info jmicron_chipset __devinitdata = {
 	.name		= DRV_NAME,
 	.enablebits	= { { 0x40, 0x01, 0x01 }, { 0x40, 0x10, 0x10 } },
 	.port_ops	= &jmicron_port_ops,

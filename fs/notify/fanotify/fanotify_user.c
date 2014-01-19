@@ -278,8 +278,7 @@ static ssize_t copy_event_to_user(struct fsnotify_group *group,
 		goto out_close_fd;
 
 	ret = -EFAULT;
-	if (fanotify_event_metadata.event_len > sizeof fanotify_event_metadata ||
-	    copy_to_user(buf, &fanotify_event_metadata,
+	if (copy_to_user(buf, &fanotify_event_metadata,
 			 fanotify_event_metadata.event_len))
 		goto out_kill_access_response;
 

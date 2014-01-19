@@ -134,7 +134,6 @@ struct sock_fprog {	/* Required for SO_ATTACH_FILTER. */
 
 struct sk_buff;
 struct sock;
-struct bpf_jit_work;
 
 struct sk_filter
 {
@@ -142,9 +141,6 @@ struct sk_filter
 	unsigned int         	len;	/* Number of filter blocks */
 	unsigned int		(*bpf_func)(const struct sk_buff *skb,
 					    const struct sock_filter *filter);
-#ifdef CONFIG_BPF_JIT
-	struct bpf_jit_work	*work;
-#endif
 	struct rcu_head		rcu;
 	struct sock_filter     	insns[0];
 };

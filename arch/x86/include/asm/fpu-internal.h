@@ -86,11 +86,6 @@ static inline int fxrstor_checking(struct i387_fxsave_struct *fx)
 {
 	int err;
 
-#if defined(CONFIG_X86_64) && defined(CONFIG_PAX_MEMORY_UDEREF)
-	if ((unsigned long)fx < PAX_USER_SHADOW_BASE)
-		fx = (struct i387_fxsave_struct __user *)((void *)fx + PAX_USER_SHADOW_BASE);
-#endif
-
 	/* See comment in fxsave() below. */
 #ifdef CONFIG_AS_FXSAVEQ
 	asm volatile("1:  fxrstorq %[fx]\n\t"
@@ -119,11 +114,6 @@ static inline int fxrstor_checking(struct i387_fxsave_struct *fx)
 static inline int fxsave_user(struct i387_fxsave_struct __user *fx)
 {
 	int err;
-
-#if defined(CONFIG_X86_64) && defined(CONFIG_PAX_MEMORY_UDEREF)
-	if ((unsigned long)fx < PAX_USER_SHADOW_BASE)
-		fx = (struct i387_fxsave_struct __user *)((void __user *)fx + PAX_USER_SHADOW_BASE);
-#endif
 
 	/*
 	 * Clear the bytes not touched by the fxsave and reserved
@@ -281,7 +271,7 @@ static inline int restore_fpu_checking(struct task_struct *tsk)
 		"emms\n\t"		/* clear stack tags */
 		"fildl %P[addr]",	/* set F?P to defined value */
 		X86_FEATURE_FXSAVE_LEAK,
-		[addr] "m" (init_tss[smp_processor_id()].x86_tss.sp0));
+		[addr] "m" (tsk->thread.fpu.has_fpu));
 
 	return fpu_restore_checking(&tsk->thread.fpu);
 }

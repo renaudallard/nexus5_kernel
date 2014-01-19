@@ -159,7 +159,7 @@ static void ca_destroy(struct count_array *ca)
 /*----------------------------------------------------------------*/
 
 struct sm_checker {
-	dm_space_map_no_const sm;
+	struct dm_space_map sm;
 
 	struct count_array old_counts;
 	struct count_array counts;

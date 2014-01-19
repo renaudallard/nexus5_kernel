@@ -17,58 +17,26 @@ typedef struct {
 
 static inline void local_inc(local_t *l)
 {
-	asm volatile(_ASM_INC "%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_DEC "%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
+	asm volatile(_ASM_INC "%0"
 		     : "+m" (l->a.counter));
 }
 
 static inline void local_dec(local_t *l)
 {
-	asm volatile(_ASM_DEC "%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_INC "%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
+	asm volatile(_ASM_DEC "%0"
 		     : "+m" (l->a.counter));
 }
 
 static inline void local_add(long i, local_t *l)
 {
-	asm volatile(_ASM_ADD "%1,%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_SUB "%1,%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
+	asm volatile(_ASM_ADD "%1,%0"
 		     : "+m" (l->a.counter)
 		     : "ir" (i));
 }
 
 static inline void local_sub(long i, local_t *l)
 {
-	asm volatile(_ASM_SUB "%1,%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_ADD "%1,%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
+	asm volatile(_ASM_SUB "%1,%0"
 		     : "+m" (l->a.counter)
 		     : "ir" (i));
 }
@@ -86,16 +54,7 @@ static inline int local_sub_and_test(long i, local_t *l)
 {
 	unsigned char c;
 
-	asm volatile(_ASM_SUB "%2,%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_ADD "%2,%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
-		     "sete %1\n"
+	asm volatile(_ASM_SUB "%2,%0; sete %1"
 		     : "+m" (l->a.counter), "=qm" (c)
 		     : "ir" (i) : "memory");
 	return c;
@@ -113,16 +72,7 @@ static inline int local_dec_and_test(local_t *l)
 {
 	unsigned char c;
 
-	asm volatile(_ASM_DEC "%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_INC "%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
-		     "sete %1\n"
+	asm volatile(_ASM_DEC "%0; sete %1"
 		     : "+m" (l->a.counter), "=qm" (c)
 		     : : "memory");
 	return c != 0;
@@ -140,16 +90,7 @@ static inline int local_inc_and_test(local_t *l)
 {
 	unsigned char c;
 
-	asm volatile(_ASM_INC "%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_DEC "%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
-		     "sete %1\n"
+	asm volatile(_ASM_INC "%0; sete %1"
 		     : "+m" (l->a.counter), "=qm" (c)
 		     : : "memory");
 	return c != 0;
@@ -168,16 +109,7 @@ static inline int local_add_negative(long i, local_t *l)
 {
 	unsigned char c;
 
-	asm volatile(_ASM_ADD "%2,%0\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_SUB "%2,%0\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
-		     "sets %1\n"
+	asm volatile(_ASM_ADD "%2,%0; sets %1"
 		     : "+m" (l->a.counter), "=qm" (c)
 		     : "ir" (i) : "memory");
 	return c;
@@ -200,15 +132,7 @@ static inline long local_add_return(long i, local_t *l)
 #endif
 	/* Modern 486+ processor */
 	__i = i;
-	asm volatile(_ASM_XADD "%0, %1\n"
-
-#ifdef CONFIG_PAX_REFCOUNT
-		     "jno 0f\n"
-		     _ASM_MOV "%0,%1\n"
-		     "int $4\n0:\n"
-		     _ASM_EXTABLE(0b, 0b)
-#endif
-
+	asm volatile(_ASM_XADD "%0, %1;"
 		     : "+r" (i), "+m" (l->a.counter)
 		     : : "memory");
 	return i + __i;
