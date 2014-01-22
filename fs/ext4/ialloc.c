@@ -304,41 +304,57 @@ error_return:
 	ext4_std_error(sb, fatal);
 }
 
+/* ADAM PDE: linear alloc for directories */
+static int find_group_dir_linear(struct super_block *sb, struct inode *parent,
+				ext4_group_t *best_group)
+{
+	ext4_group_t ngroups = ext4_get_groups_count(sb);
+	struct ext4_group_desc *desc = NULL;
+	ext4_group_t group;
+	int ret = -1;
+
+	for (group = 0; group < ngroups; group++) {
+		desc = ext4_get_group_desc(sb, group, NULL);
+		if (desc && ext4_free_inodes_count(sb, desc)) {
+			*best_group = group;
+			ret = 0;
+			break;
+		}
+	}
+	return ret;
+}
+
+/* ADAM PDE: linear alloc for files */
+static int find_group_other_linear(struct super_block *sb, struct inode *parent,
+				ext4_group_t *best_group)
+{
+	ext4_group_t ngroups = ext4_get_groups_count(sb);
+	//unsigned int freei;
+	struct ext4_group_desc *desc = NULL;
+	ext4_group_t group;
+	int ret = -1;
+
+	for (group = 0; group < ngroups; group++) {
+		desc = ext4_get_group_desc(sb, group, NULL);
+		if (desc && ext4_free_inodes_count(sb, desc)) {
+		    if (ext4_free_group_clusters(sb, desc)) {
+		    //if (ext4_free_blks_count(sb, desc)) {
+			    *best_group = group;
+			    ret = 0;
+			    break;
+			}
+		}
+	}
+	return ret;
+}
+
 struct orlov_stats {
 	__u32 free_inodes;
 	__u32 free_clusters;
 	__u32 used_dirs;
 };
 
-/*
- * Helper function for Orlov's allocator; returns critical information
- * for a particular block group or flex_bg.  If flex_size is 1, then g
- * is a block group number; otherwise it is flex_bg number.
- */
-static void get_orlov_stats(struct super_block *sb, ext4_group_t g,
-			    int flex_size, struct orlov_stats *stats)
-{
-	struct ext4_group_desc *desc;
-	struct flex_groups *flex_group = EXT4_SB(sb)->s_flex_groups;
 
-	if (flex_size > 1) {
-		stats->free_inodes = atomic_read(&flex_group[g].free_inodes);
-		stats->free_clusters = atomic_read(&flex_group[g].free_clusters);
-		stats->used_dirs = atomic_read(&flex_group[g].used_dirs);
-		return;
-	}
-
-	desc = ext4_get_group_desc(sb, g, NULL);
-	if (desc) {
-		stats->free_inodes = ext4_free_inodes_count(sb, desc);
-		stats->free_clusters = ext4_free_group_clusters(sb, desc);
-		stats->used_dirs = ext4_used_dirs_count(sb, desc);
-	} else {
-		stats->free_inodes = 0;
-		stats->free_clusters = 0;
-		stats->used_dirs = 0;
-	}
-}
 
 /*
  * Orlov's allocator for directories.
@@ -361,247 +377,9 @@ static void get_orlov_stats(struct super_block *sb, ext4_group_t g,
  * free inodes than average (starting at parent's group).
  */
 
-static int find_group_orlov(struct super_block *sb, struct inode *parent,
-			    ext4_group_t *group, umode_t mode,
-			    const struct qstr *qstr)
-{
-	ext4_group_t parent_group = EXT4_I(parent)->i_block_group;
-	struct ext4_sb_info *sbi = EXT4_SB(sb);
-	ext4_group_t real_ngroups = ext4_get_groups_count(sb);
-	int inodes_per_group = EXT4_INODES_PER_GROUP(sb);
-	unsigned int freei, avefreei, grp_free;
-	ext4_fsblk_t freeb, avefreec;
-	unsigned int ndirs;
-	int max_dirs, min_inodes;
-	ext4_grpblk_t min_clusters;
-	ext4_group_t i, grp, g, ngroups;
-	struct ext4_group_desc *desc;
-	struct orlov_stats stats;
-	int flex_size = ext4_flex_bg_size(sbi);
-	struct dx_hash_info hinfo;
 
-	ngroups = real_ngroups;
-	if (flex_size > 1) {
-		ngroups = (real_ngroups + flex_size - 1) >>
-			sbi->s_log_groups_per_flex;
-		parent_group >>= sbi->s_log_groups_per_flex;
-	}
 
-	freei = percpu_counter_read_positive(&sbi->s_freeinodes_counter);
-	avefreei = freei / ngroups;
-	freeb = EXT4_C2B(sbi,
-		percpu_counter_read_positive(&sbi->s_freeclusters_counter));
-	avefreec = freeb;
-	do_div(avefreec, ngroups);
-	ndirs = percpu_counter_read_positive(&sbi->s_dirs_counter);
 
-	if (S_ISDIR(mode) &&
-	    ((parent == sb->s_root->d_inode) ||
-	     (ext4_test_inode_flag(parent, EXT4_INODE_TOPDIR)))) {
-		int best_ndir = inodes_per_group;
-		int ret = -1;
-
-		if (qstr) {
-			hinfo.hash_version = DX_HASH_HALF_MD4;
-			hinfo.seed = sbi->s_hash_seed;
-			ext4fs_dirhash(qstr->name, qstr->len, &hinfo);
-			grp = hinfo.hash;
-		} else
-			get_random_bytes(&grp, sizeof(grp));
-		parent_group = (unsigned)grp % ngroups;
-		for (i = 0; i < ngroups; i++) {
-			g = (parent_group + i) % ngroups;
-			get_orlov_stats(sb, g, flex_size, &stats);
-			if (!stats.free_inodes)
-				continue;
-			if (stats.used_dirs >= best_ndir)
-				continue;
-			if (stats.free_inodes < avefreei)
-				continue;
-			if (stats.free_clusters < avefreec)
-				continue;
-			grp = g;
-			ret = 0;
-			best_ndir = stats.used_dirs;
-		}
-		if (ret)
-			goto fallback;
-	found_flex_bg:
-		if (flex_size == 1) {
-			*group = grp;
-			return 0;
-		}
-
-		/*
-		 * We pack inodes at the beginning of the flexgroup's
-		 * inode tables.  Block allocation decisions will do
-		 * something similar, although regular files will
-		 * start at 2nd block group of the flexgroup.  See
-		 * ext4_ext_find_goal() and ext4_find_near().
-		 */
-		grp *= flex_size;
-		for (i = 0; i < flex_size; i++) {
-			if (grp+i >= real_ngroups)
-				break;
-			desc = ext4_get_group_desc(sb, grp+i, NULL);
-			if (desc && ext4_free_inodes_count(sb, desc)) {
-				*group = grp+i;
-				return 0;
-			}
-		}
-		goto fallback;
-	}
-
-	max_dirs = ndirs / ngroups + inodes_per_group / 16;
-	min_inodes = avefreei - inodes_per_group*flex_size / 4;
-	if (min_inodes < 1)
-		min_inodes = 1;
-	min_clusters = avefreec - EXT4_CLUSTERS_PER_GROUP(sb)*flex_size / 4;
-
-	/*
-	 * Start looking in the flex group where we last allocated an
-	 * inode for this parent directory
-	 */
-	if (EXT4_I(parent)->i_last_alloc_group != ~0) {
-		parent_group = EXT4_I(parent)->i_last_alloc_group;
-		if (flex_size > 1)
-			parent_group >>= sbi->s_log_groups_per_flex;
-	}
-
-	for (i = 0; i < ngroups; i++) {
-		grp = (parent_group + i) % ngroups;
-		get_orlov_stats(sb, grp, flex_size, &stats);
-		if (stats.used_dirs >= max_dirs)
-			continue;
-		if (stats.free_inodes < min_inodes)
-			continue;
-		if (stats.free_clusters < min_clusters)
-			continue;
-		goto found_flex_bg;
-	}
-
-fallback:
-	ngroups = real_ngroups;
-	avefreei = freei / ngroups;
-fallback_retry:
-	parent_group = EXT4_I(parent)->i_block_group;
-	for (i = 0; i < ngroups; i++) {
-		grp = (parent_group + i) % ngroups;
-		desc = ext4_get_group_desc(sb, grp, NULL);
-		grp_free = ext4_free_inodes_count(sb, desc);
-		if (desc && grp_free && grp_free >= avefreei) {
-			*group = grp;
-			return 0;
-		}
-	}
-
-	if (avefreei) {
-		/*
-		 * The free-inodes counter is approximate, and for really small
-		 * filesystems the above test can fail to find any blockgroups
-		 */
-		avefreei = 0;
-		goto fallback_retry;
-	}
-
-	return -1;
-}
-
-static int find_group_other(struct super_block *sb, struct inode *parent,
-			    ext4_group_t *group, umode_t mode)
-{
-	ext4_group_t parent_group = EXT4_I(parent)->i_block_group;
-	ext4_group_t i, last, ngroups = ext4_get_groups_count(sb);
-	struct ext4_group_desc *desc;
-	int flex_size = ext4_flex_bg_size(EXT4_SB(sb));
-
-	/*
-	 * Try to place the inode is the same flex group as its
-	 * parent.  If we can't find space, use the Orlov algorithm to
-	 * find another flex group, and store that information in the
-	 * parent directory's inode information so that use that flex
-	 * group for future allocations.
-	 */
-	if (flex_size > 1) {
-		int retry = 0;
-
-	try_again:
-		parent_group &= ~(flex_size-1);
-		last = parent_group + flex_size;
-		if (last > ngroups)
-			last = ngroups;
-		for  (i = parent_group; i < last; i++) {
-			desc = ext4_get_group_desc(sb, i, NULL);
-			if (desc && ext4_free_inodes_count(sb, desc)) {
-				*group = i;
-				return 0;
-			}
-		}
-		if (!retry && EXT4_I(parent)->i_last_alloc_group != ~0) {
-			retry = 1;
-			parent_group = EXT4_I(parent)->i_last_alloc_group;
-			goto try_again;
-		}
-		/*
-		 * If this didn't work, use the Orlov search algorithm
-		 * to find a new flex group; we pass in the mode to
-		 * avoid the topdir algorithms.
-		 */
-		*group = parent_group + flex_size;
-		if (*group > ngroups)
-			*group = 0;
-		return find_group_orlov(sb, parent, group, mode, NULL);
-	}
-
-	/*
-	 * Try to place the inode in its parent directory
-	 */
-	*group = parent_group;
-	desc = ext4_get_group_desc(sb, *group, NULL);
-	if (desc && ext4_free_inodes_count(sb, desc) &&
-	    ext4_free_group_clusters(sb, desc))
-		return 0;
-
-	/*
-	 * We're going to place this inode in a different blockgroup from its
-	 * parent.  We want to cause files in a common directory to all land in
-	 * the same blockgroup.  But we want files which are in a different
-	 * directory which shares a blockgroup with our parent to land in a
-	 * different blockgroup.
-	 *
-	 * So add our directory's i_ino into the starting point for the hash.
-	 */
-	*group = (*group + parent->i_ino) % ngroups;
-
-	/*
-	 * Use a quadratic hash to find a group with a free inode and some free
-	 * blocks.
-	 */
-	for (i = 1; i < ngroups; i <<= 1) {
-		*group += i;
-		if (*group >= ngroups)
-			*group -= ngroups;
-		desc = ext4_get_group_desc(sb, *group, NULL);
-		if (desc && ext4_free_inodes_count(sb, desc) &&
-		    ext4_free_group_clusters(sb, desc))
-			return 0;
-	}
-
-	/*
-	 * That failed: try linear search for a free inode, even if that group
-	 * has no free blocks.
-	 */
-	*group = parent_group;
-	for (i = 0; i < ngroups; i++) {
-		if (++*group >= ngroups)
-			*group = 0;
-		desc = ext4_get_group_desc(sb, *group, NULL);
-		if (desc && ext4_free_inodes_count(sb, desc))
-			return 0;
-	}
-
-	return -1;
-}
 
 /*
  * There are two policies for allocating an inode.  If the new inode is
@@ -643,6 +421,15 @@ struct inode *ext4_new_inode(handle_t *handle, struct inode *dir, umode_t mode,
 	ei = EXT4_I(inode);
 	sbi = EXT4_SB(sb);
 
+/* ADAM PDE: linear alloc */
+
+	if (S_ISDIR(mode)) {
+		ret2 = find_group_dir_linear(sb, dir, &group);
+	} else
+		ret2 = find_group_other_linear(sb, dir, &group);
+
+
+/*
 	if (!goal)
 		goal = sbi->s_inode_goal;
 
@@ -658,7 +445,10 @@ struct inode *ext4_new_inode(handle_t *handle, struct inode *dir, umode_t mode,
 	else
 		ret2 = find_group_other(sb, dir, &group, mode);
 
+
 got_group:
+*/
+
 	EXT4_I(dir)->i_last_alloc_group = group;
 	err = -ENOSPC;
 	if (ret2 == -1)
